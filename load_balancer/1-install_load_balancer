@@ -1,53 +1,39 @@
 #!/usr/bin/env bash
-# Install and configure HAProxy to load-balance the two web servers.
-
-set -e
-
-if [ "$(id -u)" -ne 0 ]; then
-    echo "This script must be run as root." >&2
-    exit 1
-fi
-
-echo "web-01"
-echo "web-02"
+# Installs and configures HAProxy on lb-01 to distribute traffic to web-01 and web-02
 
 apt-get update
-DEBIAN_FRONTEND=noninteractive apt-get install -y haproxy
+apt-get install -y haproxy
 
-# Keep the package-provided SysV init script enabled.
-sed -i 's/^ENABLED=.*/ENABLED=1/' /etc/default/haproxy
-update-rc.d haproxy defaults
+echo "ENABLED=1" > /etc/default/haproxy
 
-cat > /etc/haproxy/haproxy.cfg <<'HAPROXY'
+cat << 'EOF' > /etc/haproxy/haproxy.cfg
 global
-    log /dev/log local0
-    log /dev/log local1 notice
-    chroot /var/lib/haproxy
-    stats socket /run/haproxy/admin.sock mode 660 level admin
-    stats timeout 30s
-    user haproxy
-    group haproxy
-    daemon
+	log /dev/log	local0
+	log /dev/log	local1 notice
+	chroot /var/lib/haproxy
+	stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+	stats timeout 30s
+	user haproxy
+	group haproxy
+	daemon
 
 defaults
-    log global
-    mode http
-    option httplog
-    option dontlognull
-    timeout connect 5000ms
-    timeout client 50000ms
-    timeout server 50000ms
+	log	global
+	mode	http
+	option	httplog
+	option	dontlognull
+	timeout connect 5000
+	timeout client  50000
+	timeout server  50000
 
 frontend http_front
-    bind *:80
-    default_backend web_servers
+	bind *:80
+	default_backend web_servers
 
 backend web_servers
-    balance roundrobin
-    server web-01 web-01:80 check
-    server web-02 web-02:80 check
-HAPROXY
+	balance roundrobin
+	server 7349-web-01 18.171.158.15:80 check
+	server 7349-web-02 16.60.112.142:80 check
+EOF
 
-printf 'Configured HAProxy backends: web-01 web-02\n'
-haproxy -c -f /etc/haproxy/haproxy.cfg
 service haproxy restart
